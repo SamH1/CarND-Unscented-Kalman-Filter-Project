@@ -65,10 +65,10 @@ UKF::UKF() {
 
   // Weights of sigma points
   //VectorXd 
-  weights_ = VectorXd(2*n_aug+1); // Section 24
+  weights_ = VectorXd(2*n_aug_+1); // Section 24
 
   // predicted sigma points matrix
-  Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug + 1); //section 21
+  Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1); //section 21
 
   // Sigma point spreading parameter
   lambda_ = 3 - n_aug_; //section 16
@@ -113,7 +113,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     //out_file_ << "R (x,y)" << ekf_.x_(0) << ", " << ekf_.x_(1) << endl; // for debug
     }
     
-    else if (measurement_pack.sensor_type_ == MeasurementPackage::LASER) {
+    else if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
       /**
       Initialize state.
       */
@@ -137,10 +137,10 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     // initialize weights
 
     double weight_0 = lambda_/(lambda_+n_aug_);
-    weights(0) = weight_0;
+    weights_(0) = weight_0;
     for (int i=1; i<2*n_aug_+1; i++) {  //2n+1 weights
       double weight_ = 0.5/(n_aug_+lambda_);
-      weights(i) = weight_;
+      weights_(i) = weight_;
     }
   
     //update timestamp
@@ -148,22 +148,30 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
     // done initializing, no need to predict or update
     is_initialized_ = true;
-    return;
-  }
 
-  //***** must call the functions here if not initialization I guess ?? ****
-  double delta_t = meas_package.timestamp_ - time_us_;
-  time_us_ = meas_package.timestamp_;
-  Prediction(delta_t);
+    out_file_ << "Initialization done /n" << endl;
+    
+    //****** est-ce qu'il faut faire une première prédiction update au moment de l'initialisation ou non ????
+    
+  } else {
 
-  if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-  // Radar updates
-    UpdateRadar(meas_package);
-  }else{
-    UpdateLidar(meas_package);
+    //***** Faut revoir comment se fait l'appel des fonctions prediction et Update dans EKF ****
+    double delta_t = meas_package.timestamp_ - time_us_;
+    time_us_ = meas_package.timestamp_;
+    Prediction(delta_t);
+
+    out_file_ << "Prediction done /n" << endl;
+
+    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+    // Radar updates
+      UpdateRadar(meas_package);
+    }else{
+      UpdateLidar(meas_package);
+    }
+
+    out_file_ << "Update done /n" << endl;
   }
 }
-
 /**
  * Predicts sigma points, the state, and the state covariance matrix.
  * @param {double} delta_t the change in time (in seconds) between the last
@@ -209,7 +217,7 @@ void UKF::Prediction(double delta_t) {
   for (int i = 0; i< n_aug_; i++)
   {
     Xsig_aug.col(i+1)       = x_aug + sqrt(lambda_+n_aug_) * L.col(i);
-    Xsig_aug.col(i+1+n_aug) = x_aug - sqrt(lambda_+n_aug_) * L.col(i);
+    Xsig_aug.col(i+1+n_aug_) = x_aug - sqrt(lambda_+n_aug_) * L.col(i);
   }
 
 /*******************************************************************************
@@ -284,7 +292,7 @@ void UKF::Prediction(double delta_t) {
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {  //iterate over sigma points
 
     // state difference
-    VectorXd x_diff = Xsig_pred.col(i) - x_;
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
     //angle normalization
     while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
     while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
@@ -367,6 +375,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   //measurement covariance matrix S
   MatrixXd S = MatrixXd(n_z,n_z);
   S.fill(0.0);
+ 
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {  //2n+1 simga points
     //residual
     VectorXd z_diff = Zsig.col(i) - z_pred;
@@ -393,14 +402,18 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
  * Update radar sigma points
  ******************************************************************************/
   //create matrix for cross correlation Tc
-  MatrixXd Tc = MatrixXd(n_x, n_z);
+  MatrixXd Tc = MatrixXd(n_x_, n_z);
 
   //calculate cross correlation matrix
   Tc.fill(0.0);
-  for (int i = 0; i < 2 * n_aug + 1; i++) {  //2n+1 simga points
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {  //2n+1 simga points
 
     //residual
-    // has been already calculated
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+
+    //angle normalization
+    while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
+    while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
 
     // state difference
     VectorXd x_diff = Xsig_pred_.col(i) - x_;
