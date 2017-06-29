@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "xlocale": "cpp"
+        "xlocale": "cpp",
+        "iosfwd": "cpp",
+        "xlocbuf": "cpp"
     }
 }

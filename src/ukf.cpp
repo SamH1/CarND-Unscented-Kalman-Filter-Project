@@ -24,10 +24,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5); // faut l'initialiser non ??
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 30;
+  std_a_ = 3;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 30;
+  std_yawdd_ = 3;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -91,51 +91,37 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   Complete this function! Make sure you switch between lidar and radar
   measurements.
   */
-
   /*****************************************************************************
    *  Initialization
    ****************************************************************************/
   if (!is_initialized_) {
 
     // first measurement
-    x_ << 0, 0, 0, 0, 0; // vel_abs and yaw_rate need to be initialized here ? value is important for the RMSE (select by trial and error ?) 
+    x_ << 0, 0, 0, 0, 0; // vel_abs and yaw_rate should be initialized here to improve RMSE (select by trial and error ?) 
                           
-
     if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
       /**
       Convert radar from polar to cartesian coordinates and initialize state.
       */
-    double ro = meas_package.raw_measurements_[0];
-    double theta = meas_package.raw_measurements_[1];
-    x_(0) = ro*cos(theta);
-    x_(1) = ro*sin(theta);
-    //x_(3) = theta; c'est yaw et pas theta
-    //out_file_ << "R (x,y)" << ekf_.x_(0) << ", " << ekf_.x_(1) << endl; // for debug
-    }
-    
+      double ro = meas_package.raw_measurements_[0];
+      double theta = meas_package.raw_measurements_[1];
+      x_(0) = ro*cos(theta);
+      x_(1) = ro*sin(theta);
+      out_file_ << "R (x,y)" << x_(0) << ", " << x_(1) << endl; // for debug
+    } 
     else if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
       /**
       Initialize state.
       */
-    x_(0) = meas_package.raw_measurements_[0];
-    x_(1) = meas_package.raw_measurements_[1];
-    //x_(3) = atan2(x_(1),x_(0)); c'est yaw et pas theta
-    //out_file_ << "L (x,y)" << ekf_.x_(0) << ", " << ekf_.x_(1) << endl; // for debug     
+      x_(0) = meas_package.raw_measurements_[0];
+      x_(1) = meas_package.raw_measurements_[1];
+      out_file_ << "L (x,y)" << x_(0) << ", " << x_(1) << endl; // for debug   
     }
-
-    /*
-    //initialize transition matrix
-    ekf_.F_ << 1, 0, 0.05, 0,
-      0, 1, 0, 0.05,
-      0, 0, 1, 0,
-      0, 0, 0, 1;
-    */
 
     // initialize covariance matrix for prediction - TBC
     P_.fill(0.0);
 
-    // initialize weights
-
+    // initialize weights for sigma points
     double weight_0 = lambda_/(lambda_+n_aug_);
     weights_(0) = weight_0;
     for (int i=1; i<2*n_aug_+1; i++) {  //2n+1 weights
@@ -143,34 +129,46 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       weights_(i) = weight_;
     }
   
-    //update timestamp
+    //initialize timestamp
     time_us_ = meas_package.timestamp_;
 
     // done initializing, no need to predict or update
     is_initialized_ = true;
 
-    out_file_ << "Initialization done /n" << endl;
-    
-    //****** est-ce qu'il faut faire une première prédiction update au moment de l'initialisation ou non ????
-    
-  } else {
+    out_file_ << "Initialization done" << endl;
 
-    //***** Faut revoir comment se fait l'appel des fonctions prediction et Update dans EKF ****
-    double delta_t = meas_package.timestamp_ - time_us_;
-    time_us_ = meas_package.timestamp_;
-    Prediction(delta_t);
+    return;
+  } 
 
-    out_file_ << "Prediction done /n" << endl;
+  out_file_ << "---------------------------------------" << endl;
+  /*****************************************************************************
+  *  Prediction
+  ****************************************************************************/
+  double delta_t = (meas_package.timestamp_ - time_us_)/ 1000000.0; // dt - expressed in seconds
+  time_us_ = meas_package.timestamp_;
+  
+  double x1 = meas_package.raw_measurements_[0];
+  double x2 = meas_package.raw_measurements_[1];
+  out_file_ << meas_package.sensor_type_ <<", " << x1 << ", " << x2 << endl; // for debug     
+  out_file_ << "dt " << delta_t << endl;
 
-    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-    // Radar updates
-      UpdateRadar(meas_package);
-    }else{
-      UpdateLidar(meas_package);
-    }
+  Prediction(delta_t);
+  //out_file_ << "Prediction done" << endl;
 
-    out_file_ << "Update done /n" << endl;
+  /*****************************************************************************
+  *  Prediction
+  ****************************************************************************/
+  if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+  // Radar updates
+    out_file_ << "update radar" << endl;
+    UpdateRadar(meas_package);
+  }else{
+    out_file_ << "update Lidar" << endl;
+    UpdateLidar(meas_package);
   }
+
+  //out_file_ << "Update done" << endl;
+  
 }
 /**
  * Predicts sigma points, the state, and the state covariance matrix.
@@ -300,11 +298,11 @@ void UKF::Prediction(double delta_t) {
     P_ = P_ + weights_(i) * x_diff * x_diff.transpose() ;
   }
 
-  //print prediction results (for debug)
-  //out_file_ << "Predicted state" << std::endl;
-  //out_file_<< x << std::endl;
-  //out_file_ << "Predicted covariance matrix" << std::endl;
-  //out_file_ << P << std::endl;
+ //print prediction results (for debug)
+  out_file_ << "Predicted state x_" << endl;
+  out_file_<< x_ << endl;
+  out_file_ << "Predicted covariance matrix P_" << endl;
+  out_file_ << P_ << endl; 
 
 }
 
@@ -321,6 +319,36 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
+	MatrixXd H_ = MatrixXd(2, 5);
+  H_ << 1, 0, 0, 0, 0,
+	            0, 1, 0, 0, 0;
+
+  //add measurement noise covariance matrix
+  MatrixXd R_ = MatrixXd(2,2);
+  R_ <<    std_laspx_ *std_laspx_ , 0,
+          0, std_laspy_ *std_laspy_ ;
+
+  
+  VectorXd z = meas_package.raw_measurements_;
+  VectorXd z_pred = H_ * x_;
+	VectorXd y = z - z_pred;
+	MatrixXd Ht = H_.transpose();
+	MatrixXd S = H_ * P_ * Ht + R_;
+	MatrixXd Si = S.inverse();
+	MatrixXd PHt = P_ * Ht;
+	MatrixXd K = PHt * Si;
+
+	//new estimate
+	x_ = x_ + (K * y);
+	long x_size = x_.size();
+	MatrixXd I = MatrixXd::Identity(x_size, x_size);
+	P_ = (I - K * H_) * P_;
+
+  //print prediction results (for debug)
+  out_file_ << "updated state x_" << endl;
+  out_file_<< x_ << endl;
+  out_file_ << "updated covariance matrix P_" << endl;
+  out_file_ << P_ << endl;
 
 }
 
@@ -395,8 +423,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   S = S + R;
 
   //print result (for debug)
-  //out_file_ << "z_pred: " << std::endl << z_pred << std::endl;
-  //out_file_ << "S: " << std::endl << S << std::endl;
+  out_file_ << "z_pred: " << std::endl << z_pred << std::endl;
+  out_file_ << "S: " << std::endl << S << std::endl;
 
 /*******************************************************************************
  * Update radar sigma points
@@ -430,25 +458,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   //residual
   VectorXd z = VectorXd(n_z);
 
-
-  // Pas sûr que c'est de X_ que je dois récupérer les valeur ???%??????
-  // extract values for better readibility
-  /*
-  double p_x = x_(0);
-  double p_y = x_(1);
-  double v  = x_(2);
-  double yaw = x_(3);
-
-  double v1 = cos(yaw)*v;
-  double v2 = sin(yaw)*v;
-
-
-  // measurement model
-  z(0) = sqrt(p_x*p_x + p_y*p_y);                        //r
-  z(1) = atan2(p_y,p_x);                                 //phi
-  z(2) = (p_x*v1 + p_y*v2 ) / sqrt(p_x*p_x + p_y*p_y);   //r_dot
-  */
-
   z = meas_package.raw_measurements_;
 
   VectorXd z_diff = z - z_pred;
@@ -461,4 +470,9 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   x_ = x_ + K * z_diff;
   P_ = P_ - K*S*K.transpose();
 
+  //print prediction results (for debug)
+  out_file_ << "updated state x_" << endl;
+  out_file_<< x_ << endl;
+  out_file_ << "updated covariance matrix P_" << endl;
+  out_file_ << P_ << endl;
 }
